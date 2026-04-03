@@ -1,0 +1,5 @@
+{
+  "name": "NebulaRedraw AI",
+  "description": "IA-powered cleaning and redrawing tool for scanlations and digital restoration, simulating a Photoshop plugin workflow.",
+  "requestFramePermissions": []
+}

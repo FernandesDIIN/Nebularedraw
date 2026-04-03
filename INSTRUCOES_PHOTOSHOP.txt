@@ -1,0 +1,46 @@
+/**
+ * Este arquivo contém as instruções para integrar o NebulaRedraw AI como um Painel UXP.
+ */
+
+/*
+1. CONCEITO DE FUNCIONAMENTO:
+   - O plugin agora é um PAINEL COMPACTO (Panel) que vive dentro do Photoshop.
+   - O usuário clica em "Sync from Photoshop" para capturar a visualização do documento atual.
+   - A marcação (Brush/Eraser) é feita no próprio painel para definir a área de limpeza.
+   - Ao clicar em "Clean & Redraw", a IA processa e mostra o resultado.
+   - "Apply to PS" envia a imagem processada de volta para uma nova camada no Photoshop.
+
+2. CÓDIGO UXP NECESSÁRIO (Exemplo):
+*/
+
+/*
+const { app, core } = require("photoshop");
+const { storage } = require("uxp");
+
+// Função para capturar o documento atual como Base64
+async function syncDocument() {
+    return await core.executeAsModal(async () => {
+        const doc = app.activeDocument;
+        // Exportar para um arquivo temporário e ler como base64
+        const tempFolder = await storage.localFileSystem.getTemporaryFolder();
+        const file = await tempFolder.createFile("temp.png", { overwrite: true });
+        await doc.saveAs.png(file);
+        const arrayBuffer = await file.read({ format: storage.formats.binary });
+        return Buffer.from(arrayBuffer).toString('base64');
+    });
+}
+
+// Função para aplicar o resultado de volta
+async function applyToLayer(base64Data) {
+    await core.executeAsModal(async () => {
+        const doc = app.activeDocument;
+        // Lógica para criar nova camada e colar o conteúdo do base64
+    });
+}
+*/
+
+/*
+3. O QUE FALTA:
+   - Substituir os simuladores de arquivo no App.tsx pelas funções `syncDocument` e `applyToLayer`.
+   - O manifest.json já está configurado para o modo "panel".
+*/
