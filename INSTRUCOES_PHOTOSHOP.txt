@@ -6,18 +6,18 @@
 1. CONCEITO DE FUNCIONAMENTO:
    - O plugin agora é um PAINEL COMPACTO (Panel) que vive dentro do Photoshop.
    - O usuário clica em "Sync from Photoshop" para capturar a visualização do documento atual.
-   - A marcação (Brush/Eraser) é feita no próprio painel para definir a área de limpeza.
-   - Ao clicar em "Clean & Redraw", a IA processa e mostra o resultado.
-   - "Apply to PS" envia a imagem processada de volta para uma nova camada no Photoshop.
+   - A marcação agora é feita através de uma Ferramenta de Seleção Retangular (Marquee).
+   - O plugin recorta apenas a área selecionada e envia para a IA, resolvendo o problema de imagens gigantes (Webtoons).
+   - "Apply to Layer" envia a imagem processada de volta para a mesma camada ativa, na mesma coordenada do recorte.
 
-2. CÓDIGO UXP NECESSÁRIO (Exemplo):
+2. CÓDIGO UXP NECESSÁRIO PARA CONECTAR O REACT AO PHOTOSHOP:
 */
 
 /*
 const { app, core } = require("photoshop");
 const { storage } = require("uxp");
 
-// Função para capturar o documento atual como Base64
+// A) Função para capturar o documento atual como Base64 (Para o botão Sync)
 async function syncDocument() {
     return await core.executeAsModal(async () => {
         const doc = app.activeDocument;
@@ -30,12 +30,88 @@ async function syncDocument() {
     });
 }
 
-// Função para aplicar o resultado de volta
-async function applyToLayer(base64Data) {
+// B) Função para aplicar o resultado de volta na mesma camada (Para o botão Apply to Layer)
+// O React deve passar a imagem em base64 e as coordenadas reais (actualX, actualY, actualW, actualH)
+async function applyToLayer(base64Data, x, y, width, height) {
     await core.executeAsModal(async () => {
         const doc = app.activeDocument;
-        // Lógica para criar nova camada e colar o conteúdo do base64
-    });
+        
+        // 1. Converter Base64 de volta para arquivo temporário
+        const base64Content = base64Data.split(',')[1];
+        const binaryString = atob(base64Content);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        const tempFolder = await storage.localFileSystem.getTemporaryFolder();
+        const file = await tempFolder.createFile("nebula_result.png", { overwrite: true });
+        await file.write(bytes.buffer, { format: storage.formats.binary });
+        
+        // 2. Criar uma seleção na coordenada exata
+        const { batchPlay } = require("photoshop").action;
+        
+        await batchPlay([
+            {
+                "_obj": "set",
+                "_target": [ { "_ref": "channel", "_property": "selection" } ],
+                "to": {
+                    "_obj": "rectangle",
+                    "top": { "_unit": "pixelsUnit", "_value": y },
+                    "left": { "_unit": "pixelsUnit", "_value": x },
+                    "bottom": { "_unit": "pixelsUnit", "_value": y + height },
+                    "right": { "_unit": "pixelsUnit", "_value": x + width }
+                }
+            }
+        ], { synchronousExecution: true });
+        
+        // 3. Colocar o arquivo (ele vai centralizar na seleção ativa)
+        await batchPlay([
+            {
+                "_obj": "placeEvent",
+                "null": {
+                    "_path": file.nativePath,
+                    "_kind": "local"
+                },
+                "freeTransformCenterState": {
+                    "_enum": "quadCenterState",
+                    "_value": "QCSAverage"
+                },
+                "offset": {
+                    "_obj": "offset",
+                    "horizontal": { "_unit": "pixelsUnit", "_value": 0 },
+                    "vertical": { "_unit": "pixelsUnit", "_value": 0 }
+                },
+                "_options": { "dialogOptions": "dontDisplay" }
+            }
+        ], { synchronousExecution: true });
+        
+        // 4. Rasterizar a camada inserida (Smart Object -> Pixel Layer)
+        await batchPlay([
+            {
+                "_obj": "rasterizeLayer",
+                "_target": [ { "_ref": "layer", "_enum": "ordinal", "_value": "targetEnum" } ]
+            }
+        ], { synchronousExecution: true });
+
+        // 5. Fazer Merge Down (Mesclar para baixo, aplicando na camada original)
+        await batchPlay([
+            {
+                "_obj": "mergeLayersNew",
+                "_target": [ { "_ref": "layer", "_enum": "ordinal", "_value": "targetEnum" } ]
+            }
+        ], { synchronousExecution: true });
+
+        // 6. Limpar a seleção
+        await batchPlay([
+            {
+                "_obj": "set",
+                "_target": [ { "_ref": "channel", "_property": "selection" } ],
+                "to": { "_enum": "ordinal", "_value": "none" }
+            }
+        ], { synchronousExecution: true });
+        
+    }, { "commandName": "Aplicando Nebula Redraw" });
 }
 */
 
