@@ -19,7 +19,7 @@
 
 ## 🛠️ Como Instalar e Configurar para Desenvolvimento
 
-Como este projeto foi prototipado usando React e Vite, você precisará compilar o código antes de jogar no Photoshop.
+O código já está 100% integrado com as APIs nativas do Photoshop (`require("photoshop")` e `require("uxp")`). Você só precisa compilar e carregar no UDT.
 
 1. **Clone o repositório:**
    ```bash
@@ -32,18 +32,13 @@ Como este projeto foi prototipado usando React e Vite, você precisará compilar
    npm install
    ```
 
-3. **Faça a Ponte UXP (Crucial):**
-   Abra o arquivo `src/App.tsx`. Atualmente, as funções de sincronização (`syncFromPhotoshop`) e aplicação (`applyToLayer`) estão simuladas para rodar no navegador. 
-   * Leia o arquivo `INSTRUCOES_PHOTOSHOP.txt`.
-   * Substitua as funções simuladas no React pelo código UXP nativo fornecido nas instruções.
-
-4. **Compile o projeto:**
+3. **Compile o projeto:**
    ```bash
    npm run build
    ```
    *Isso irá gerar uma pasta `dist/` com os arquivos finais (HTML, JS, CSS).*
 
-5. **Carregue no Adobe UDT:**
+4. **Carregue no Adobe UDT:**
    * Abra o Adobe UXP Developer Tool.
    * Clique em **Add Plugin**.
    * Selecione o arquivo `manifest.json` na raiz deste projeto.

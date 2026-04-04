@@ -99,24 +99,36 @@ export default function App() {
   }, [image]);
 
   // Simulated Photoshop Sync
-  const syncFromPhotoshop = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e: any) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          setImage(event.target?.result as string);
-          setResult(null);
-          setError(null);
-          setSelection(null);
-        };
-        reader.readAsDataURL(file);
-      }
-    };
-    input.click();
+  const syncFromPhotoshop = async () => {
+    try {
+      // @ts-ignore
+      const { app, core } = window.require("photoshop");
+      // @ts-ignore
+      const { storage } = window.require("uxp");
+
+      const base64 = await core.executeAsModal(async () => {
+          const doc = app.activeDocument;
+          if (!doc) throw new Error("Nenhum documento aberto.");
+          const tempFolder = await storage.localFileSystem.getTemporaryFolder();
+          const file = await tempFolder.createFile("temp.png", { overwrite: true });
+          await doc.saveAs.png(file);
+          const arrayBuffer = await file.read({ format: storage.formats.binary });
+          
+          const uint8Array = new Uint8Array(arrayBuffer);
+          let binaryString = '';
+          const chunkSize = 0x8000;
+          for (let i = 0; i < uint8Array.length; i += chunkSize) {
+            binaryString += String.fromCharCode.apply(null, Array.from(uint8Array.subarray(i, i + chunkSize)));
+          }
+          return btoa(binaryString);
+      });
+      setImage(`data:image/png;base64,${base64}`);
+      setResult(null);
+      setError(null);
+      setSelection(null);
+    } catch (err: any) {
+      setError("Erro ao sincronizar: " + (err.message || "Photoshop API não encontrada. Teste dentro do UXP."));
+    }
   };
 
   const getCoordinates = (e: React.MouseEvent | React.TouchEvent) => {
@@ -241,6 +253,106 @@ export default function App() {
       setError(err.message || "Failed to process.");
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const applyToPhotoshop = async () => {
+    if (!result || !selection || !originalImgRef.current || !canvasRef.current) return;
+    try {
+      // @ts-ignore
+      const { app, core } = window.require("photoshop");
+      // @ts-ignore
+      const { storage } = window.require("uxp");
+      // @ts-ignore
+      const { batchPlay } = window.require("photoshop").action;
+
+      const scaleX = originalImgRef.current.width / canvasRef.current.width;
+      const scaleY = originalImgRef.current.height / canvasRef.current.height;
+
+      const actualX = Math.round(selection.x * scaleX);
+      const actualY = Math.round(selection.y * scaleY);
+      const actualW = Math.round(selection.w * scaleX);
+      const actualH = Math.round(selection.h * scaleY);
+
+      await core.executeAsModal(async () => {
+          const doc = app.activeDocument;
+          
+          const base64Content = result.split(',')[1];
+          const binaryString = atob(base64Content);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+          }
+          
+          const tempFolder = await storage.localFileSystem.getTemporaryFolder();
+          const file = await tempFolder.createFile("nebula_result.png", { overwrite: true });
+          await file.write(bytes.buffer, { format: storage.formats.binary });
+          
+          await batchPlay([
+              {
+                  "_obj": "set",
+                  "_target": [ { "_ref": "channel", "_property": "selection" } ],
+                  "to": {
+                      "_obj": "rectangle",
+                      "top": { "_unit": "pixelsUnit", "_value": actualY },
+                      "left": { "_unit": "pixelsUnit", "_value": actualX },
+                      "bottom": { "_unit": "pixelsUnit", "_value": actualY + actualH },
+                      "right": { "_unit": "pixelsUnit", "_value": actualX + actualW }
+                  }
+              }
+          ], { synchronousExecution: true });
+          
+          await batchPlay([
+              {
+                  "_obj": "placeEvent",
+                  "null": {
+                      "_path": file.nativePath,
+                      "_kind": "local"
+                  },
+                  "freeTransformCenterState": {
+                      "_enum": "quadCenterState",
+                      "_value": "QCSAverage"
+                  },
+                  "offset": {
+                      "_obj": "offset",
+                      "horizontal": { "_unit": "pixelsUnit", "_value": 0 },
+                      "vertical": { "_unit": "pixelsUnit", "_value": 0 }
+                  },
+                  "_options": { "dialogOptions": "dontDisplay" }
+              }
+          ], { synchronousExecution: true });
+          
+          await batchPlay([
+              {
+                  "_obj": "rasterizeLayer",
+                  "_target": [ { "_ref": "layer", "_enum": "ordinal", "_value": "targetEnum" } ]
+              }
+          ], { synchronousExecution: true });
+
+          await batchPlay([
+              {
+                  "_obj": "mergeLayersNew",
+                  "_target": [ { "_ref": "layer", "_enum": "ordinal", "_value": "targetEnum" } ]
+              }
+          ], { synchronousExecution: true });
+
+          await batchPlay([
+              {
+                  "_obj": "set",
+                  "_target": [ { "_ref": "channel", "_property": "selection" } ],
+                  "to": { "_enum": "ordinal", "_value": "none" }
+              }
+          ], { synchronousExecution: true });
+          
+      }, { "commandName": "Aplicando Nebula Redraw" });
+
+      const maskCtx = maskCanvasRef.current?.getContext('2d');
+      maskCtx?.clearRect(0, 0, maskCanvasRef.current!.width, maskCanvasRef.current!.height);
+      setSelection(null);
+      setResult(null);
+
+    } catch (err: any) {
+      setError("Erro ao aplicar no Photoshop: " + (err.message || "API não encontrada. Teste dentro do UXP."));
     }
   };
 
@@ -429,7 +541,7 @@ export default function App() {
 
           <div className="grid grid-cols-2 gap-2">
             <button 
-              onClick={() => {}} // In UXP: applyResultToPhotoshop(result, actualX, actualY)
+              onClick={applyToPhotoshop}
               disabled={!result}
               className="py-2 bg-[#4a4a4a] hover:bg-[#555555] disabled:opacity-30 text-white text-[10px] font-bold rounded flex items-center justify-center gap-1.5"
             >
